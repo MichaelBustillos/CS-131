@@ -1,0 +1,14 @@
+Subset uses a recursive pattern that matches the first element of the first list with all elements of the list b and checks if any of the first is not in the second. I use List.exists to figure out if an element head is in b.
+
+Equal_sets basically uses subset. The linear algebra definition is a is subset of b and b is subset of a.
+
+set_union used the same format as subset, recursing and comparing the first element of a 
+with elements of b. . If the element isn't already in b, we add it to b and return b at the end. I used mem here instead of exists since it seemed easier to use. 
+
+set_intersection also recurses and checks if the first element of a is in b. If it is, it adds it to b, otherwise it recurses without that element.
+
+set_diff recurses through all elements of a and checks each with elements in b. If it isn't in b, then we can add it to the answer, since we want all elements of a not in b. Otherwise, we just ignore that element and continue; 
+
+Computed_fixed_point uses a whittling down approach where either we find that the predicate applies to the input function or the we recurse again with the new inputs resulting from the function. Eventually, either the function ends up with 0 or it returns with the correct fixed point value.
+
+ Originally for filter_reachable, I tried to use computed_fixed_point to whittle down the inputs using a recursive loop that would apply the function until either a terminal is hit or a dead end. This quickly became too complicated so I tried using a version of DFS where I would recurse over all the "next" nodes possible and mark these as "reachable". To mark them, I merely deleted them from g and then in the original function after the loop finished, added them back in by taking the set difference between g and the outputted function. My solution does an operation twice since it filters out the 2nd part of the tuples then builds the tuple backtogether. This is quite slow but I couldn't find a better way to do it. 

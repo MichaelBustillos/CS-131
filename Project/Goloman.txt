@@ -1,0 +1,15 @@
+RECEIVED: IAMAT kiwi.cs.ucla.edu +34.068930-118.445127 1520023934.918963997
+Attempting to open connection with server Hands at port 11556... Connected
+Attempting to open connection with server Holiday at port 11557... Failure
+Cannot connect to server Holiday@ port: 11557 from Goloman
+Attempting to open connection with server Wilkes at port 11559... Failure
+Cannot connect to server Wilkes@ port: 11559 from Goloman
+TRANSMITTING: AT Goloman +32403357.919821024 kiwi.cs.ucla.edu +34.068930-118.445127 1520023934.918963997
+RECEIVED: FLOOD kiwi.cs.ucla.edu +34.068930-118.445127 1520023934.918963997 1552427292.838785 Goloman
+RECEIVED: IAMAT kiwi.cs.ucla.edu +34.068930-118.445127 1520023934.918963997
+Attempting to open connection with server Hands at port 11556... Connected
+Attempting to open connection with server Holiday at port 11557... Failure
+Cannot connect to server Holiday@ port: 11557 from Goloman
+Attempting to open connection with server Wilkes at port 11559... Connected
+TRANSMITTING: AT Goloman +32403437.96725726 kiwi.cs.ucla.edu +34.068930-118.445127 1520023934.918963997
+RECEIVED: FLOOD kiwi.cs.ucla.edu +34.068930-118.445127 1520023934.918963997 1552427372.8862212 Goloman

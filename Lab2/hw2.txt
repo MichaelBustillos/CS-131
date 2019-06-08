@@ -1,0 +1,55 @@
+I did not choose to use either of make_parser or make_matcher for the other 
+because the recursive choices I made for make_matcher were different than
+ the ones that were necessary for make_matcher. Make_matcher recursed
+ in a preorder pattern that was not the breadth-first search way of recursing
+ in make_parser. In make_parser, one had to traverse level by level but the
+ matching for make_matcher caused it to go down deep first before 
+matching the next and I couldn’t find a way to consolidate the 
+ways together. Therefore I chose to write the two separately 
+with some recursive similarities that ended with how I processed the 
+output of the recursion. They differed in the fact that I tried to return a list 
+of visited nodes in make_parser and just the empty acceptor for 
+make_matcher.
+Make_matcher was done in a depth-first search approach. It modeled 
+the deep depth first search and used the hint given in class to use and
+and or matchers. The or matcher takes the input grammars and 
+essentially checks if you can go down any of the specified levels. Oring
+together multiple outputs of functions in one level, 
+would check each of the list items to see if that particular expansion is 
+a plausible expansion. If any of the list item expansions return a good 
+result, we have a hit and return that result. Otherwise we continue 
+down the list. The and matcher on the other hand, checks individual
+lists in the list of lists, e.g [N Term; N Binop; N Expr]. Essentially, 
+the or matcher returns the parse tree while the and matcher ands 
+multiple branch trees together to give back to the and tree.
+Make_parser on the other hand, recurses using preorder to return 
+a list of elements for that tree. This is a list of preorders so every
+branch rules that we hit gets added to a list of list. After we get this
+preorder list of elements, we can process it knowing the fact that all
+elements in that list are going to be used. This takes away the 
+complexity of checking for edge cases. We essentially build the Nodes
+and Leafs from this list using a breadth first search recursion line by line.
+The parse_tree building essentially stores a remaining list and the list 
+tuples of nodes. Each time we go horizontal or vertical, we would update
+that list so that we don't traverse over the already visited elements again.
+The rest is essentially going horizontal first to add all of the elements
+whilst going vertical for each of the individual nodes and appending them
+as Nodes or Leafs depending on the terminality or non-terminality of 
+the node in question.  
+The biggest difference that force me to implement make_parser and 
+make_matcher separately is because of the difference in accessing the nodes.
+I couldn't figure out a way to perform make_matcher without depth first 
+search and I couldn't figure out a way to perform make_parser with 
+depth first search. Therefore, I chose to write them differently and as 
+such, since breadth first and depth first are completely different 
+algorithms, I chose to use them to make sure make_parser, and
+make_matcher would be differently implemented. 
+A huge weakness to my code was the fact that it is very possible for the
+grammar to go into an infinite loop. For example if the grammar is in the
+form   
+(Sentence,
+   function
+     | Sentence ->
+         [[N Sentence; N VPhrase]]
+this will cause the function to go into an infinite loop and there is no
+way in my code to check for this edge case and break the loop immediately.

@@ -1,0 +1,264 @@
+import asyncio
+import aiohttp
+import sys
+import json
+import time
+import re
+
+#API_KEY = 'AIzaSyDrddRCDIyIMqeHQE4UZPVnD6kue8Vq6ak'
+API_KEY = 'AIzaSyDDJKTorlehv4i_oXt84bc3ndeh_ffq_4Y'
+localhost = '127.0.0.1'
+reachable = {
+    'Goloman' : ['Hands', 'Holiday', 'Wilkes'],
+    'Hands'   : ['Wilkes', 'Goloman'],
+    'Holiday' : ['Welsh', 'Wilkes', 'Goloman'],
+    'Welsh'   : ['Holiday'],
+    'Wilkes'  : ['Holiday', 'Goloman', 'Hands']
+}
+
+ports = {
+    'Goloman': 11555,
+    'Hands': 11556,
+    'Holiday': 11557,
+    'Welsh': 11558,
+    'Wilkes': 11559
+}
+
+clients = {}
+
+def parseLatLong(lat_long):
+    if lat_long.count('+') + lat_long.count('-') != 2:
+        return None
+    if not lat_long[len(lat_long) - 1].isdigit():
+        return None
+    if lat_long[0] != '+' and lat_long[0] != '-':
+        return None
+    if lat_long[1:].find('+') != -1:
+        if lat_long[0] == '+':
+            return lat_long[1:].split('+')
+        else:
+            lst = lat_long[1:].split('+')
+            lst = ['-'+ lst[0], lst[1]]
+            return lst
+    else:
+        if lat_long[0] == '+':
+            lst = lat_long[1:].split('-')
+            return [lst[0], '-' + lst[1]]
+        else:
+            lst = lat_long[1:].split('-')
+            return ['-'+lst[0], '-'+ lst[1]]
+
+async def handle_iamat(writer, decoded, curTime, error_msg):
+    flood_msg = decoded
+    hostname = flood_msg[1]
+    lat_long = flood_msg[2]
+    t = flood_msg[3]
+    time_difference = curTime - float(t)
+    #print(type(flood_msg))
+    write_msg = ""
+    if(flood_msg is not None):
+        if(parseLatLong(lat_long) is not None):
+            flood_msg.append(str(curTime))
+            flood_msg.append(server_name)
+        clients[hostname] = flood_msg
+        time_difference = ("+" + str(time_difference)) if (time_difference>0) else str(time_difference)
+        write_msg = 'AT %s %s %s %s %s\n' % (server_name, time_difference, hostname, lat_long, t)
+        toFlood = 'FLOOD %s %s %s %s %s\n' % (flood_msg[1], flood_msg[2], flood_msg[3], flood_msg[4], flood_msg[5]) 
+        await asyncio.ensure_future(floodServers(toFlood))
+    else:
+        write_msg = error_msg
+    await writeToLog("TRANSMITTING: " + write_msg)
+    await writeToServer(writer, write_msg)
+
+async def writeToServer(writer, msg):
+    try:
+        writer.write(msg.encode())
+        await writer.drain()
+    except:
+        print("Couldn't write to server. \n")
+
+async def floodServers(msg):
+    for server in reachable[server_name]:
+        await writeToLog("Attempting to open connection with server {0} at port {1}...".format(server, ports[server]))
+        try:
+            (r, w)= await asyncio.open_connection(localhost, ports[server], loop=loop)
+            await writeToLog(" Connected\n")
+            await writeToServer(w, msg)
+        except:
+            #print("Cannot connect to server " + server + "@ port: "+str(ports[server]) + " from "+server_name)
+            await writeToLog(" Failure\nCannot connect to server " + server + "@ port: "+str(ports[server]) + " from "+server_name+"\n")
+
+async def handle_flooding(decoded, curTime):
+    hostname = decoded[1]
+    lat_long = decoded[2]
+    msg_time = decoded[3]
+    if hostname not in clients:
+            clients[hostname] = decoded
+            asyncio.ensure_future(floodServers('FLOOD {0}\n'.format(' '.join(decoded[1:]))))
+    else:
+        if msg_time > clients[hostname][3]:
+            clients[hostname] = decoded
+            asyncio.ensure_future(floodServers('FLOOD {0}\n'.format(' '.join(decoded[1:]))))
+
+#Inspired from https://aiohttp.readthedocs.io/en/stable/
+async def fetch(session, url):
+    async with session.get(url) as response:
+        return await response.json()
+
+async def writeToLog(msg):
+    if msg == "":
+        return
+        
+    try:
+        logFile.write(msg)
+    except:
+        print('Error: cannot write to log w/ message %s' % msg)
+
+async def handle_whatsat(writer, decoded, curTime, error_msg):
+    hostname = decoded[1]
+    radius = float(decoded[2])
+    max_number = decoded[3]
+
+    write_msg = ""
+    if hostname not in clients:
+        write_msg = error_msg
+    else:
+        client = clients[hostname]
+        loc, temp_server, client_name, client_latlong, client_msg_time = parseLatLong(client[2]), client[5], client[1], client[2], client[3]
+
+
+        time_difference = float(client[4]) - float(client[3])
+        url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=%s,%s&key=%s&radius=%d' % (str(loc[0]), str(loc[1]), API_KEY, radius)
+        time_difference = ("+" + str(time_difference)) if (time_difference>0) else str(time_difference)
+        write_msg = "AT %s %s %s %s %s\n" % (temp_server, time_difference, client_name, client_latlong , client_msg_time)
+
+        #Inspired from https://aiohttp.readthedocs.io/en/stable/
+
+        async with aiohttp.ClientSession() as session:
+            resp = await fetch(session, url)
+            resp['results'] = resp['results'][:int(max_number)]
+            write_msg += json.dumps(resp, indent=3)
+            write_msg += "\n\n"
+
+    await writeToLog("SENDING: " + write_msg)
+    await writeToServer(writer, write_msg)
+
+async def msg_handler(writer, decoded, msg):
+    curTime = time.time()
+    cmd_type = decoded[0]
+
+    if cmd_type == "FLOOD":
+        await handle_flooding(decoded, curTime)
+    else:
+        error = "? %s\n" % (msg.decode())
+        if cmd_type == 'IAMAT':
+            await handle_iamat(writer, decoded, curTime, error)
+        elif cmd_type == 'WHATSAT':
+            await handle_whatsat(writer, decoded, curTime, error)
+        else:
+            await writeToLog("TRANSMITTING: " + error)
+            await writeToServer(writer, error)
+
+async def process_client(reader, writer):
+    # while True:
+    # if reader.at_eof():
+    #     break
+
+    #3 possible commands
+    #IAMAT kiwi.cs.ucla.edu +34.068930-118.445127 1520023934.918963997
+    #WHATSAT kiwi.cs.ucla.edu 10 5
+    #FLOOD %s %s %s %s %s\n' % (flood_msg[1], flood_msg[2], flood_msg[3], flood_msg[4], flood_msg[5]) 
+    msg = bytearray()
+    while True:
+        chunk = await reader.read()
+        if not chunk:
+            break
+        msg+=chunk
+
+
+    await writeToLog("RECEIVED: " + msg.decode())
+
+    decoded = msg.decode()
+    orig_msg = decoded
+    decoded = decoded.replace('\n', ' ')
+    decoded = re.sub(' +', ' ', decoded)
+    decoded = decoded.strip().split(' ')
+    if(msg_ok(decoded)):
+        await msg_handler(writer, decoded, msg)
+    else:
+        error_msg = '? '+ orig_msg
+        await writeToServer(writer, error_msg)
+        await writeToLog("Incorrect format: "+ error_msg)
+def isFloat(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+def isInt(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
+def msg_ok(decoded):
+    if(decoded[0] == 'IAMAT'):
+        if(len(decoded)!=4):
+            return False
+        pattern = '[\+\-][1-9][0-9]+(.)[0-9]+[\+\-][1-9][0-9]+(.)[0-9]+'
+        prog = re.compile(pattern)
+        result = prog.match(decoded[2])
+        if(result.group(0)!=decoded[2]):
+            return False
+        if(not isFloat(decoded[3])):
+            return False
+        return True
+    elif(decoded[0] == 'WHATSAT'):
+        if(len(decoded)!=4):
+            return False
+        if((not isInt(decoded[2])) or (not isInt(decoded[3]))):
+            return False
+        return True
+    elif(decoded[0] == 'FLOOD'):
+        return True
+    else:
+        return False
+
+def new_client(reader, writer):
+    task = asyncio.create_task(process_client(reader, writer))
+    def stop(task):
+        writer.close()
+    task.add_done_callback(stop)
+
+def main():
+    if(len(sys.argv) != 2):
+        print("Incorrent number of arguments. # of arguments given: \n" + str(len(sys.argv)))
+        exit(1)
+
+    global server_name
+    server_name = sys.argv[1]
+
+    global logFile
+    logFile = open(server_name + ".txt", "w+")
+
+    global loop
+    #Example from https://asyncio.readthedocs.io/en/latest/tcp_echo.html
+
+
+    loop = asyncio.get_event_loop()
+    coro = asyncio.start_server(new_client, localhost, ports[server_name], loop=loop)
+    server = loop.run_until_complete(coro)
+
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
+
+    finally:
+        server.close()
+        loop.run_until_complete(server.wait_closed())
+        loop.close()
+        logFile.close()
+
+if __name__ == '__main__':
+    main()
